@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reset password — Concierge Compass</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #FAF8F5; color: #3D3630;
+      font-family: Georgia, 'Times New Roman', serif;
+      padding: 24px;
+    }
+    main { width: 100%; max-width: 380px; text-align: center; }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; }
+    p { color: #7A6F66; margin: 0 0 24px; line-height: 1.5; }
+    input {
+      width: 100%; box-sizing: border-box; height: 48px; margin-bottom: 12px;
+      padding: 0 14px; font-size: 16px; font-family: inherit; color: #3D3630;
+      background: #FFFFFF; border: 1px solid #DFDACF; border-radius: 10px;
+    }
+    input:focus { outline: 2px solid #4D403A; border-color: #4D403A; }
+    button {
+      width: 100%; height: 48px; border: 0; border-radius: 10px;
+      background: #4D403A; color: #FAF8F5; font-size: 16px; font-family: inherit;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: default; }
+    .msg { margin-top: 14px; font-size: 0.95rem; min-height: 1.4em; }
+    .msg.err { color: #A03B2E; }
+    .msg.ok { color: #3E6B4A; }
+    .check {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #4D403A; color: #FAF8F5;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; margin: 0 auto 20px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <!-- State: form -->
+    <div id="form-state" class="hidden">
+      <h1>Choose a new password</h1>
+      <p>Set a new password for your Concierge Compass account.</p>
+      <form id="reset-form">
+        <input id="pw1" type="password" placeholder="New password" autocomplete="new-password" minlength="6" required>
+        <input id="pw2" type="password" placeholder="Confirm new password" autocomplete="new-password" minlength="6" required>
+        <button id="submit" type="submit">Update password</button>
+      </form>
+      <div id="form-msg" class="msg"></div>
+    </div>
+
+    <!-- State: success -->
+    <div id="done-state" class="hidden">
+      <div class="check">✓</div>
+      <h1>Password updated</h1>
+      <p>You're all set. Return to the Concierge Compass app<br>and sign in with your new password.</p>
+    </div>
+
+    <!-- State: invalid/expired link -->
+    <div id="invalid-state" class="hidden">
+      <h1>Link expired</h1>
+      <p>This reset link is invalid or has expired.<br>
+      Request a new one from the app's <em>Forgot&nbsp;Password</em> screen.</p>
+    </div>
+
+    <!-- State: loading -->
+    <div id="loading-state">
+      <p>Loading…</p>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    // Public client-side values (same ones the mobile app ships with).
+    const SUPABASE_URL = 'https://ifmoettxxegdglashryb.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_LXNrmM9Mu7L0sLdivW1qtA_DAfJqumM';
+
+    const show = (id) => {
+      for (const s of ['form-state', 'done-state', 'invalid-state', 'loading-state']) {
+        document.getElementById(s).classList.toggle('hidden', s !== id);
+      }
+    };
+
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { detectSessionInUrl: true, persistSession: false },
+    });
+
+    (async () => {
+      // The email link verifies at Supabase, then redirects here with recovery
+      // tokens in the URL hash (or an error, e.g. expired link).
+      const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+      if (hash.get('error')) { show('invalid-state'); return; }
+
+      // Give detectSessionInUrl a moment to consume the hash tokens.
+      let session = null;
+      for (let i = 0; i < 10 && !session; i++) {
+        ({ data: { session } } = await client.auth.getSession());
+        if (!session) await new Promise(r => setTimeout(r, 300));
+      }
+      show(session ? 'form-state' : 'invalid-state');
+    })();
+
+    document.getElementById('reset-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('form-msg');
+      const btn = document.getElementById('submit');
+      const pw1 = document.getElementById('pw1').value;
+      const pw2 = document.getElementById('pw2').value;
+      msg.className = 'msg err';
+      if (pw1.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; return; }
+      if (pw1 !== pw2) { msg.textContent = 'Passwords do not match.'; return; }
+
+      btn.disabled = true;
+      msg.className = 'msg'; msg.textContent = 'Updating…';
+      const { error } = await client.auth.updateUser({ password: pw1 });
+      if (error) {
+        btn.disabled = false;
+        msg.className = 'msg err';
+        msg.textContent = error.message || 'Could not update the password. Try requesting a new link.';
+        return;
+      }
+      // Drop the recovery session so nothing lingers in this browser.
+      await client.auth.signOut().catch(() => {});
+      show('done-state');
+    });
+  </script>
+</body>
+</html>
