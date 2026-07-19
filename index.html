@@ -4,6 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Concierge Compass</title>
+  <script>
+    // Older app builds send password-reset emails without an explicit redirect,
+    // so their recovery tokens land here (the Site URL). Forward them to the
+    // reset page with the URL hash intact.
+    if (location.hash.includes('type=recovery')) {
+      location.replace('/reset-password/' + location.hash);
+    }
+  </script>
   <style>
     :root { color-scheme: light; }
     body {
